@@ -191,7 +191,7 @@ struct Opt {
     /// Specifies a prefix to remove from the paths (e.g. if grcov is run on a different machine
     /// than the one that generated the code coverage information).
     #[arg(short, long, value_name = "PATH")]
-    prefix_dir: Option<PathBuf>,
+    prefix_dir: Option<String>,
     /// Ignore source files that can't be found on the disk.
     #[arg(long)]
     ignore_not_existing: bool,
@@ -363,7 +363,14 @@ fn main() {
         .filter(|source_dir| source_dir != Path::new(""))
         .map(|source_dir| canonicalize_path(source_dir).expect("Source directory does not exist."));
 
-    let prefix_dir = opt.prefix_dir.or_else(|| source_root.clone());
+    let prefix_dir = opt
+        .prefix_dir
+        .or_else(|| {
+            source_root
+                .clone()
+                .and_then(|p| p.to_str().map(|s| s.to_owned()))
+        })
+        .map(|r| to_regex(&r));
 
     let tmp_dir = tempfile::tempdir().expect("Failed to create temporary directory");
     let tmp_path = tmp_dir.path().to_owned();
@@ -462,7 +469,7 @@ fn main() {
         result_map,
         path_mapping,
         source_root.as_deref(),
-        prefix_dir.as_deref(),
+        prefix_dir.as_ref(),
         opt.ignore_not_existing,
         &opt.ignore_dir,
         &opt.keep_dir,

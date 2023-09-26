@@ -1,8 +1,8 @@
 name: Release
 on:
   push:
-    tags:
-      - v*.*.*
+    branches:
+      - "master"
 jobs:
   release:
     name: Build release artifacts
@@ -132,7 +132,7 @@ jobs:
           curl --request POST \
             --url https://api.github.com/repos/${{ github.repository }}/releases \
             --header "Accept: application/vnd.github.v3+json" \
-            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Authorization: Bearer ${{ secrets.GRCOV_SECRET }}" \
             --header "Content-Type: application/json" \
             --data '{
               "tag_name": "${{ github.ref_name }}",
@@ -164,7 +164,7 @@ jobs:
             curl --request POST \
               --url https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.release.outputs.id }}/assets?name=${filename} \
               --header "Accept: application/vnd.github.v3+json" \
-              --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              --header "Authorization: Bearer ${{ secrets.GRCOV_SECRET }}" \
               --header "Content-Type: ${type}" \
               --data-binary "@${file}" \
               --fail
