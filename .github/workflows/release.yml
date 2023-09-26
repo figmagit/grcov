@@ -1,12 +1,14 @@
 name: Release
 on:
   push:
-    tags:
-      - v*.*.*
+    branches:
+      - "master"
 jobs:
   release:
     name: Build release artifacts
     runs-on: ${{ matrix.os }}
+    container:
+      image: ${{ matrix.image }}
     strategy:
       matrix:
         include:
@@ -16,12 +18,16 @@ jobs:
             target: aarch64-apple-darwin
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            image: rust:bullseye
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            image: rust:bullseye
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            image: rust:bullseye
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
+            image: rust:bullseye
           - os: windows-latest
             target: x86_64-pc-windows-msvc
           - os: windows-latest
@@ -29,12 +35,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Setup Rust
-        run: rustup target add ${{ matrix.target }}
       - name: Install additional toolchains
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           set -x
+          apt-get update
+          apt-get install -y sudo curl
+          # curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          # export PATH=$PATH:$HOME/.cargo/bin
+          rustup --version
+
           case "${{ matrix.target }}" in
             x86_64-unknown-linux-gnu)
               ;;
@@ -60,6 +70,9 @@ jobs:
               echo 'linker = "aarch64-linux-musl-gcc"' >> .cargo/config
               ;;
           esac
+      - name: Setup Rust
+        run: |
+          rustup target add ${{ matrix.target }}
       - name: Configure cache
         uses: actions/cache@v3
         with:
@@ -71,7 +84,8 @@ jobs:
             target/
           key: release-${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }}
       - name: Strip binary
         if: ${{ matrix.os != 'windows-latest' }}
         run: |
@@ -132,7 +146,7 @@ jobs:
           curl --request POST \
             --url https://api.github.com/repos/${{ github.repository }}/releases \
             --header "Accept: application/vnd.github.v3+json" \
-            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Authorization: Bearer ${{ secrets.GRCOV_SECRET }}" \
             --header "Content-Type: application/json" \
             --data '{
               "tag_name": "${{ github.ref_name }}",
@@ -164,7 +178,7 @@ jobs:
             curl --request POST \
               --url https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.release.outputs.id }}/assets?name=${filename} \
               --header "Accept: application/vnd.github.v3+json" \
-              --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              --header "Authorization: Bearer ${{ secrets.GRCOV_SECRET }}" \
               --header "Content-Type: ${type}" \
               --data-binary "@${file}" \
               --fail
