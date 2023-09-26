@@ -3,8 +3,10 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 use std::collections::hash_map;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
@@ -103,10 +105,12 @@ fn guess_abs_path(prefix_dir: &Path, path: &Path) -> PathBuf {
 }
 
 // Remove prefix from the source file's path.
-fn remove_prefix(prefix_dir: Option<&Path>, path: PathBuf) -> PathBuf {
+fn remove_prefix(prefix_dir: Option<&regex::bytes::Regex>, path: PathBuf) -> PathBuf {
     if let Some(prefix_dir) = prefix_dir {
-        if path.starts_with(prefix_dir) {
-            return path.strip_prefix(prefix_dir).unwrap().to_path_buf();
+        if prefix_dir.is_match(path.as_os_str().as_bytes()) {
+            return PathBuf::from(OsStr::from_bytes(
+                &prefix_dir.replace(path.as_os_str().as_bytes(), []),
+            ));
         }
     }
 
@@ -225,11 +229,18 @@ fn to_globset(dirs: &[impl AsRef<str>]) -> GlobSet {
     glob_builder.build().unwrap()
 }
 
+pub fn to_regex(glob: &str) -> regex::bytes::Regex {
+    Glob::new(glob)
+        .map_err(|_| ())
+        .map(|g| regex::bytes::Regex::new(g.regex().trim_end_matches("$")).unwrap())
+        .unwrap()
+}
+
 pub fn rewrite_paths(
     result_map: CovResultMap,
     path_mapping: Option<Value>,
     source_dir: Option<&Path>,
-    prefix_dir: Option<&Path>,
+    prefix_dir: Option<&regex::bytes::Regex>,
     ignore_not_existing: bool,
     to_ignore_dirs: &[impl AsRef<str>],
     to_keep_dirs: &[impl AsRef<str>],
@@ -452,7 +463,7 @@ mod tests {
             result_map,
             None,
             None,
-            Some(Path::new("/home/worker/src/workspace/")),
+            Some(&to_regex("/home/worker/src/workspace/")),
             false,
             &[""; 0],
             &[""; 0],
@@ -1161,7 +1172,7 @@ mod tests {
             result_map,
             None,
             Some(&canonicalize_path("tests").unwrap()),
-            Some(Path::new("/home/worker/src/workspace")),
+            Some(&to_regex("/home/worker/src/workspace")),
             true,
             &[""; 0],
             &[""; 0],
@@ -1334,7 +1345,7 @@ mod tests {
             result_map,
             Some(json!({"/home/worker/src/workspace/rewritten/main.cpp": "tests/class/main.cpp"})),
             None,
-            Some(Path::new("/home/worker/src/workspace")),
+            Some(&to_regex("/home/worker/src/workspace")),
             true,
             &[""; 0],
             &[""; 0],
@@ -1484,7 +1495,7 @@ mod tests {
             result_map,
             Some(json!({"/home/worker/src/workspace/rewritten/main.cpp": "class/main.cpp"})),
             Some(&canonicalize_path("tests").unwrap()),
-            Some(Path::new("/home/worker/src/workspace")),
+            Some(&to_regex("/home/worker/src/workspace")),
             true,
             &[""; 0],
             &[""; 0],
