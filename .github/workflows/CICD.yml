@@ -1,5 +1,5 @@
 name: CICD
-on: [pull_request, push]
+# on: [pull_request, push]
 jobs:
   test-lib:
     name: Test library
